@@ -20,51 +20,55 @@ var request = require('request-promise-native');
 const cheerio = require('cheerio');
 const mqtt = require('mqtt');
 const client = mqtt.connect(process.env.MQTT || 'mqtt://localhost');
+const tickers = process.env.TICKERS || 'SPY';
 
 /**
  * xxxx
  */
 
-client.on('connect', async () => {
+client.on('connect', () => {
   console.log('Connected to MQTT');
-  await getPrice('SPY');
-  await getPrice('BTC=');
-  process.exit();
-});
 
-async function getPrice(stock) {
-  let url = URL + stock;
-  let html;
+  let re = /,\s*/;
+  let promises = tickers.split(re).map(ticker => {
+    console.log(`  getting ${ticker}`);
 
-  try {
-    html = await request(url);
-  } catch (err) {
-    console.error(`Failed to retrv ${url}: ${err}`);
-    return;
-  }
-
-  let $ = cheerio.load(html);
-  let data = {};
-  attribs.forEach(attrib => {
-    data[attrib] = $(`#structured-data [itemprop="${attrib}"]`).attr('content');
+    return getPrice(ticker).then(data => publishPrices(ticker, data));
   });
 
-  console.log(data);
-  return publishPrices(stock, data);
+  Promise.all(promises).then(() => {
+    console.log('done');
+    process.exit();
+  });
+});
+
+function getPrice(stock) {
+  let url = URL + stock;
+  console.log(`  requesting ${url}`);
+
+  return request(url)
+    .then(html => {
+      let $ = cheerio.load(html);
+      let data = {};
+      attribs.forEach(attrib => {
+        data[attrib] = $(`#structured-data [itemprop="${attrib}"]`).attr(
+          'content'
+        );
+      });
+      return data;
+    })
+    .catch(err => {
+      console.error(`Failed to retrv ${url}: ${err}`);
+      return;
+    });
 }
 
-async function publishPrices(stock, data) {
+function publishPrices(stock, data) {
   let topic = MQTT_TOPIC + '/' + stock;
   let resp;
 
   console.log(`Publish to ${topic}:`, JSON.stringify(data));
-  try {
-    resp = await client.publish(topic, JSON.stringify(data));
-    return true;
-  } catch (err) {
-    console.error(`Error publishing to ${topic}: ${err}`);
-    return false;
-  }
+  return client.publish(topic, JSON.stringify(data));
 }
 
 /**
