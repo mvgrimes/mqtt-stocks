@@ -9,6 +9,7 @@
   "author": "Mark Grimes",
   "license": "ISC",
   "dependencies": {
+    "async-mqtt": "^1.0.1",
     "cheerio": "^1.0.0-rc.2",
     "dotenv": "^4.0.0",
     "mqtt": "^2.14.0",

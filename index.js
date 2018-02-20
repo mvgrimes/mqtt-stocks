@@ -18,7 +18,7 @@ require('dotenv').config();
 
 var request = require('request-promise-native');
 const cheerio = require('cheerio');
-const mqtt = require('mqtt');
+const mqtt = require('async-mqtt');
 const client = mqtt.connect(process.env.MQTT || 'mqtt://localhost');
 const tickers = process.env.TICKERS || 'SPY';
 
@@ -26,49 +26,58 @@ const tickers = process.env.TICKERS || 'SPY';
  * xxxx
  */
 
-client.on('connect', () => {
+client.on('connect', getAndPostAll);
+
+function getAndPostAll() {
   console.log('Connected to MQTT');
 
   let re = /,\s*/;
-  let promises = tickers.split(re).map(ticker => {
-    console.log(`  getting ${ticker}`);
-
-    return getPrice(ticker).then(data => publishPrices(ticker, data));
+  let promises = tickers.split(re).map(async ticker => {
+    console.log(`Getting ${ticker}`);
+    await getAndPost(ticker);
+    console.log(`  [${ticker}] done getAndPost`);
   });
 
-  Promise.all(promises).then(() => {
+  // console.log(promises);
+
+  Promise.all(promises).then(async () => {
     console.log('done');
+    await client.end();
     process.exit();
   });
-});
-
-function getPrice(stock) {
-  let url = URL + stock;
-  console.log(`  requesting ${url}`);
-
-  return request(url)
-    .then(html => {
-      let $ = cheerio.load(html);
-      let data = {};
-      attribs.forEach(attrib => {
-        data[attrib] = $(`#structured-data [itemprop="${attrib}"]`).attr(
-          'content'
-        );
-      });
-      return data;
-    })
-    .catch(err => {
-      console.error(`Failed to retrv ${url}: ${err}`);
-      return;
-    });
 }
 
-function publishPrices(stock, data) {
+async function getAndPost(stock) {
+  let url = URL + stock;
   let topic = MQTT_TOPIC + '/' + stock;
-  let resp;
 
-  console.log(`Publish to ${topic}:`, JSON.stringify(data));
-  return client.publish(topic, JSON.stringify(data));
+  try {
+    console.log(`  [${stock}] request ${url}`);
+    let html = await request(url);
+
+    console.log(`  [${stock}] parse data`);
+    let data = parseHtml(html);
+
+    console.log(`  [${stock}] publish to ${topic}:`, JSON.stringify(data));
+    let resp = await client.publish(topic, JSON.stringify(data), {
+      retain: true,
+    });
+
+    console.log(`  [${stock}] published`);
+  } catch (e) {
+    console.error(`  [${stock}] error processing: `, e);
+  }
+}
+
+function parseHtml(html) {
+  let $ = cheerio.load(html);
+  let data = {};
+
+  attribs.forEach(attrib => {
+    data[attrib] = $(`#structured-data [itemprop="${attrib}"]`).attr('content');
+  });
+
+  return data;
 }
 
 /**
@@ -76,7 +85,7 @@ function publishPrices(stock, data) {
  */
 function handleAppExit(options, err) {
   if (err) {
-    console.log(err.stack);
+    console.error(err.stack);
   }
 
   if (options.cleanup) {
