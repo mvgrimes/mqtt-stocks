@@ -1,0 +1,21 @@
+{
+  "name": "mqtt-stocks",
+  "version": "1.0.0",
+  "description": "Scrape stock prices and publish to MQTT",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Mark Grimes",
+  "license": "ISC",
+  "dependencies": {
+    "cheerio": "^1.0.0-rc.2",
+    "dotenv": "^4.0.0",
+    "mqtt": "^2.14.0",
+    "request": "^2.83.0",
+    "request-promise-native": "^1.0.5"
+  },
+  "devDependencies": {
+    "prettier": "^1.10.2"
+  }
+}
